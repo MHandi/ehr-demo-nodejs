@@ -1,24 +1,10 @@
-//var querystring = require("querystring");
 var fs = require("fs");
 var formidable = require("formidable");
 var request = require('request');
-var async = require('async');
 
+global.sessionID = "";
 
-
-function start(response, postData) {
-    //console.log("Request handler 'start' was called");
-    //fs.readFile("./pages/index.html", "binary", function (error, file) {
-    //    if (error) {
-    //        response.writeHead(500, {"Content-Type": "text/plain"});
-    //        response.write(error + "\n");
-    //        response.end();
-    //    } else {
-    //        response.writeHead(200, {"Content-Type": "text/html"});
-    //        response.write(file, "binary");
-    //        response.end();
-    //    }
-    //});
+function start(response, request) {
     var body = '<html>' +
         '<head>' +
         '<meta http-equiv="Content-Type" ' +
@@ -30,6 +16,14 @@ function start(response, postData) {
         '<input type="file" name="upload">' +
         '<input type="submit" value="Upload file" />' +
         '</form>' +
+
+            //query a value
+        '<form action="/query" enctype="multipart/form-data" ' +
+        'method="post">' +
+        '<input type="text" name="query">' +
+        '<input type="submit" value="query" />' +
+        '</form>' +
+
         '</body>' +
         '</html>';
 
@@ -39,139 +33,77 @@ function start(response, postData) {
 }
 
 function upload(response, request) {
-
-    //console.log("Request handler 'upload' was called ");
-
     var form = new formidable.IncomingForm();
-
     form.parse(request, function (error, fields, files) {
-        fs.renameSync(files.upload.path, "/Users/Yujie/Documents/test.json");
+        fs.renameSync(files.upload.path, "./tmp/test.json");
+
         response.writeHead(200, {"Content-Type": "text/html"});
-        response.write("received data:<br/>");
+        response.write("<h1>Data uploaded are:</h1><br/>");
         response.write("<iframe src='/show' />");  // set the text area
         response.end();
     })
-    //call login function to get the session id////
-   login();
 }
 
+//the data handle is in the show function here
 function show(response) {
-    //console.log("Request handler 'show' was called.");
-    fs.readFile("/Users/Yujie/Documents/test.json", "binary", function (error, file) {
+    fs.readFile("./tmp/test.json", "utf-8", function (error, file) {
         if (error) {
             response.writeHead(500, {"Content-Type": "text/plain"});
             response.write(error + "\n");
             response.end();
         } else {
+            //call postfile here to upload the data
+            login();
+            console.log("the file type is " +typeof (file));
+            postFile(file);
+
             response.writeHead(200, {"Content-Type": "text/plain"});
-            response.write(file, "binary");
+            response.write(file, "utf-8");
             response.end();
         }
     });
 }
 
+//get the session Id
 function login() {
-    var sessionId = "";
     request
         .post('https://rest.ehrscape.com/rest/v1/session?username=handi&password=RPEcC859',
         function (error, response, body) {
             if (!error && response.statusCode == 201) {
-                //console.log('the body is ' + body);
+                //get the sessionID
                 var pos = body.lastIndexOf("sessionId");
-
-                sessionId = body.slice(pos + 12, pos + 48);
-                console.log("the session id is " + sessionId);
-
-            postfile(sessionId);
+                global.sessionID = body.slice(pos + 12, pos + 48);
+                console.log("the session id is " + global.sessionID);
             }
         })
-        //.on('response', function (response) {
-        //    // unmodified http.IncomingMessage object
-        //    response.on('data', function (data) {
-        //        // compressed data as it is received
-        //        //console.log('data type is ' + typeof (data));
-        //        //console.log('received ' + data.length + ' bytes of compressed data');
-        //        //console.log('data is ' + data );
-        //    })
-        //}
-
-
-    return sessionId;
-
 }
 
-function postfile(sessionId) {
-    console.log("postfile function is called");
+function postFile(file) {
 
-    var ehrObj = {
-        "firstNames": "Jonny",
-        "lastNames": "Dalton",
-        "gender": "MALE",
-        "dateOfBirth": "2004-07-12T00:00:00.000Z",
-        "address": {
-            "address": "60 Florida Gardens, Garrowhill, West Yorkshire, LS23 4RT"
-        },
-        "partyAdditionalInfo": [
-            {
-                "key": "resourceType",
-                "value": "Patient"
-            }
-            ,
-
-            {
-                "key": "label",
-                "value": "NHS"
-            }
-            ,
-            {
-                "key": "system",
-                "value": "NHS"
-
-            },
-            {
-                "key": "value",
-                "value": "7430444"
-
-            }
-            ,
-            {
-
-                "key": "title",
-                "value": "Mr"
-            }
-            ,
-            {
-                "key": "system",
-                "value": "http://hl7.org/fhir/v3/vs/AdministrativeGender"
-
-            }
-        ]
-    };
-    //var test = {"id":"3279","version":0,"firstNames":"Smith","lastNames":"Nolan","gender":"MALE","dateOfBirth":"1990-03-09T00:00:00.000Z","address":{"id":"3279","version":0,"address":"Toronto, Canada"},"partyAdditionalInfo":[{"id":"3280","version":0,"key":"pet","value":"dog"},{"id":"3281","version":0,"key":"title","value":"Mr"}]};
-    var options  =  {
+    console.log('the file is ' + file);
+    console.log('the type of file is ' + typeof (JSON.stringify(file)));
+    var options = {
         method: 'POST'
-        ,url: 'https://rest.ehrscape.com/rest/v1/demographics/party'
-        ,body: ehrObj//only need a raw json string
-        ,auth:{'user': 'handi',
-               'pass': 'RPEcC859',
-               'sendImmediately': false
-                  }
-        ,json: true
-        ,encoding:'utf8'
+        , url: 'https://rest.ehrscape.com/rest/v1/demographics/party'
+        , body: JSON.parse(file)//only need a raw json string   if read a file, must transfer the file to a js objct
+        , auth: {
+            'user': 'handi',
+            'pass': 'RPEcC859',
+            'sendImmediately': false
+        }
+        , json: true
+        , encoding: 'utf8'
         , headers: {
             'Content-type': 'application/json',
-            //'content-type': 'application/json; charset=ISO-8859-1',
-            "Ehr-Session": sessionId
+            "Ehr-Session": global.sessionID
         }
     };
-    request(options,function (error, response, body) {
+    request(options, function (error, response, body) {
             console.log("postfile's callback function of postfile");
-            if (!error &&response.statusCode == 201) {
+            if (!error && response.statusCode == 201) {
                 console.log('the result is :' + response.statusCode);
             } else {
-                console.log('error: ' +error);
-                console.log('body: ' +body);
-                console.log('response status code: ' +response.statusCode);
+                console.log('response status code: ' + response.statusCode);
 
             }
         }
@@ -180,6 +112,64 @@ function postfile(sessionId) {
 }
 
 
+function query(){
+    var queryArray = [ {"key": "label", "value": "NHS Number"}, {"key": "system", "value": "NHS"},{"key": "value", "value": inputNHS.toString()}];
+
+    var options = {
+        method: 'POST'
+        , url: 'https://rest.ehrscape.com/rest/v1/demographics/party/query'
+        , body: JSON.parse(queryArray)//only need a raw json string   if read a file, must transfer the file to a js objct
+        , auth: {
+            'user': 'handi',
+            'pass': 'RPEcC859',
+            'sendImmediately': false
+        }
+        , json: true
+        , encoding: 'utf8'
+        , headers: {
+            'Content-type': 'application/json',
+            "Ehr-Session": global.sessionID
+        }
+    };
+    request(options, function (error, response, body) {
+            console.log("query's callback function of postfile");
+            if (!error && response.statusCode == 201) {
+                console.log('the result is :' + response.statusCode);
+                response.writeHead(200, {"Content-Type": "text/html"});
+                response.write("<h1>Data you wanted are:</h1><br/>");
+                response.write("<iframe src='/result' />");  // set the text area
+                response.end();
+            } else {
+                console.log('response status code: ' + response.statusCode);
+
+            }
+        }
+    );
+
+}
+
+function result (response){
+
+    fs.readFile("./tmp/test.json", "utf-8", function (error, file) {
+        if (error) {
+            response.writeHead(500, {"Content-Type": "text/plain"});
+            response.write(error + "\n");
+            response.end();
+        } else {
+            //call postfile here to upload the data
+            login();
+            console.log("the file type is " +typeof (file));
+            postFile(file);
+
+            response.writeHead(200, {"Content-Type": "text/plain"});
+            response.write(file, "utf-8");
+            response.end();
+        }
+    });
+}
+
+
 exports.start = start;
 exports.upload = upload;
 exports.show = show;
+exports.query = query;
